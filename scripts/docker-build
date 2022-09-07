@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+BUILD_MODE="local" # "local" or "remote"
+BUILD_TYPE="submission" # "train" (local only) or "submission"
+
+usage="
+Usage:  $(basename "$0") [OPTIONS]
+
+Build habitat docker image
+
+Options:
+  -h, --help          Print this message
+      --docker-name   Name of docker image to build
+  -l, --local         Build docker image for local mode
+  -r, --remote        Build docker image for remote mode
+  -s, --submit        Build docker image for submission
+  -t, --train         Build docker image for training
+"
+
+
+while [[ $# -gt 0 ]]
+do
+key="${1}"
+
+case $key in
+  -h|--help)
+    echo -e "$usage" >&2
+    exit
+    ;;
+  --docker-name)
+    shift
+    DOCKER_NAME="${1}"
+    shift
+    ;;
+  -s|--submit)
+    shift
+    BUILD_TYPE="submission"
+    ;;
+  -t|--train)
+    shift
+    BUILD_TYPE="train"
+    ;;
+  -l|--local)
+    shift
+    BUILD_TYPE="local"
+    ;;
+  -r|--remote)
+    shift
+    BUILD_TYPE="remote"
+    ;;
+  *) # unknown arg
+    echo "Unknown args: ${key}" >&2
+    exit 1
+    ;;
+esac
+done
+
+if [ -z "${DOCKER_NAME+x}" ]; then
+  DOCKER_NAME="${BUILD_MODE}_${BUILD_TYPE}"
+fi
+
+echo "Build docker image: ${DOCKER_NAME}"
+
+DOCKER_BUILDKIT=1 docker build . \
+  --build-arg INCUBATOR_VER=$(date +%Y%m%d-%H%M%S) \
+  --file docker/${BUILD_MODE}_${BUILD_TYPE}.Dockerfile \
+  -t $DOCKER_NAME

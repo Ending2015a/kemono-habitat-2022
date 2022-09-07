@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+
+BUILD_MODE="local" # "local" or "remote"
+BUILD_TYPE="submission" # "train" (local only) or "submission"
+
+EXTRA_ARGS=""
+COMMAND=""
+
+usage="
+Usage:  $(basename "$0") [OPTIONS]
+
+Start habitat docker container
+
+Options:
+  -h, --help          Print this message
+      --docker-name   Name of the docker image
+  -l, --local         Start local docker container
+  -r, --remote        Start remote docker container
+  -s, --submit        Start docker container for submission
+  -t, --train         Start docker container for training
+  -b, --bash          Start docker container with bash command
+      --shm           Share memory size
+"
+
+while [[ $# -gt 0 ]]
+do
+key="${1}"
+
+case $key in
+  -h|--help)
+    echo -e "$usage" >&2
+    exit
+    ;;
+  --docker-name)
+    shift
+    DOCKER_NAME="${1}"
+    shift
+    ;;
+  -s|--submit)
+    shift
+    BUILD_TYPE="submission"
+    ;;
+  -t|--train)
+    shift
+    BUILD_TYPE="train"
+    ;;
+  -l|--local)
+    shift
+    BUILD_TYPE="local"
+    EXTRA_ARGS="${EXTRA_ARGS} -v $(pwd)/Kemono:/Kemono"
+    EXTRA_ARGS="${EXTRA_ARGS} -e IS_LOCAL=true"
+    ;;
+  -r|--remote)
+    shift
+    BUILD_TYPE="remote"
+    ;;
+  -b|--bash)
+    shift
+    COMMAND="bash"
+    ;;
+  --shm)
+    shift
+    EXTRA_ARGS="${EXTRA_ARGS} --shm-size ${1}"
+    shift
+    ;;
+  *) # unknown arg
+    echo "Unknown args: ${key}" >&2
+    exit 1
+    ;;
+esac
+done
+
+
+if [ -z "${DOCKER_NAME+x}" ]; then
+  DOCKER_NAME="${BUILD_MODE}_${BUILD_TYPE}"
+fi
+
+
+echo "Start docker container: ${DOCKER_NAME}"
+
+# Enable screen access inside docker container
+xhost
+if [[ $? -eq 0 ]]; then
+  xhost +
+  EXTRA_ARGS="${EXTRA_ARGS} -e DISPLAY=${DISPLAY} -v /tmp/.X11-unix:/tmp/.X11-unix"
+  echo "Enable screen"
+fi
+
+if [ -z "${HABITAT_DATA_DIR+x}" ]; then
+  echo "HABITAT_DATA_DIR not set"
+  exit 1
+fi
+
+if [ -z "${HABITAT_LOG_DIR+x}" ]; then
+  HABITAT_LOG_DIG=$(pwd)/Kemono/logs
+fi
+
+docker run \
+  -v ${HABITAT_DATA_DIR}:/habitat-challenge-data \
+  -v ${HABITAT_DATA_DIR}/data:/data \
+  -v ${HABITAT_DATA_DIR}/objectgoal_hm3d:/data/datasets/objectgoal_hm3d \
+  -v ${HABITAT_LOG_DIR}:/Kemono/logs \
+  --runtime=nvidia \
+  -it \
+  --rm \
+  ${EXTRA_ARGS} \
+  -e "CHALLENGE_CONFIG_FILE=/challenge_objectnav2022.local.rgbd.yaml" \
+  -e "MAGNUM_LOG=quiet" \
+  -e "HABITAT_SIM_LOG=quiet" \
+  ${DOCKER_NAME} \
+  ${COMMAND}

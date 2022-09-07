@@ -1,0 +1,225 @@
+
+model_description: |
+  * v0: first version
+
+habitat_config: ${oc.env:CHALLENGE_CONFIG_FILE}
+
+# habitat challenge 2022 goals
+goal_mapping:
+  0: chair
+  1: bed
+  2: plant
+  3: toilet
+  4: tv_monitor
+  5: sofa
+
+num_goal_classes: 6
+
+log_path: "./Kemono/logs/evaluate/val/version_0/"
+device: cuda
+eval_num_episodes: 100
+
+visualize:
+  monitoring: ${oc.env:IS_LOCAL,null}  # record mp4
+  render_scene: ${oc.env:IS_LOCAL,null}  # screen must be enabled
+  interact: false  # interact mode
+  waitKey: -1  # -1: no wait, 0: wait forever, 1~: ms
+  keyboard: false
+  colors:
+    obstacle_color: "#ffffff"
+    objgoal_color: "#ff00ff"
+    ltg_color: "#ffff00"
+    stg_color: null #"#00ff00"
+    #plan_ltg_color: "#00ff00"
+    collision_color: "#00ffff"
+    visited_color: "#ff0000"
+    frontier_color: "#228B22"
+
+env:
+  env_id: HabitatEnv-v0
+  semantic:
+    predictor_config:
+      ckpt: ./Kemono/weights/my_rednet_ep88_498934.ckpt
+      device: ${device}
+      goal_scale: 0.5
+    goal_mapping: ${goal_mapping}
+    colorized: true
+  
+  semantic_map_builder:
+    world_config: # this is used as the base config of map projector
+      map_res: 0.03
+      map_width: 300 # initial width and height
+      map_height: 300
+      trunc_height_max: 1.6
+      width_offset: 0.0
+      height_offset: 0.0
+      clip_border: 10
+      fill_value: 0
+      to_global: true
+      device: cuda
+    local_config:
+      map_res: 0.03
+      map_width: 300
+      map_height: 300
+      width_offset: 150.0 # map_width / 2: center
+      height_offset: 0.0
+      fill_value: 0
+      to_global: false
+      center_mode: none
+    num_classes: 40
+    walkable_labels: [2, 16] # floor, stairs
+    ignore_labels: [0, 17, 20, 28, 38] # void, ceiling, towel, lightning, clothes
+    layers_labels:
+      - [1, 9, 24] # structure: wall, window, column
+      - [16] # stairs
+      - [30] # railing
+      - [4] # door
+      - [27] # fireplace
+      - [31, 36, 13] # furniture: shelving, furniture, chest_of_drawers
+      - [37] # appliances
+      - [7] # cabinet
+      - [34] # seating
+      - [3] # chair
+      - [26] # counter
+      - [5] # table
+      - [10] # sofa
+      - [8] # cushion
+      - [11] # bed
+      - [23, 25] # shower, bathtub
+      - [18] # toilet
+      - [14] # plant
+      - [22] # tv_monitor
+    goal_labels:
+      3: 9 # chair mp40: custom layer
+      11: 14 # bed
+      14: 17 # plant
+      18: 16 # toilet
+      22: 18 # tv_monitor
+      10: 12 # sofa
+    preprocess_config:
+      value_type: raw  # ['onehot', 'raw']
+    postprocess_config:
+      normalize_value: true # softmax normalize
+      force_walkable_height: 0.1
+      confidence_decay: 1.0
+    color_palette:
+      - "#FFFFFF" # background
+      - "#E2E2E2" # base layer 0: walkable
+      - "#666666" # base layer 1: obstacles
+      - "#666666" # custom layer 0: structure
+      - "#9edae5" # custom layer 1: stairs
+      - "#bd9e39" # custom layer 2: railing
+      - "#c5b0d5" # custom layer 3: door
+      - "#ad494a" # custom layer 4: fireplace
+      - "#8c6d31" # custom layer 5: furniture
+      - "#e7cb94" # custom layer 6: appliances
+      - "#1f77b4" # custom layer 7: cabinet
+      - "#ffbb78" # custom layer 8: seating
+      - "#98df8a" # custom layer 9: chair
+      - "#a55194" # custom layer10: counter
+      - "#ff7f0e" # custom layer11: table
+      - "#2ca02c" # custom layer12: sofa
+      - "#bcbd22" # custom layer13: cushion
+      - "#e377c2" # custom layer14: bed
+      - "#393b79" # custom layer15: shower, bathtub
+      - "#e7969c" # custom layer16: toilet
+      - "#8ca252" # custom layer17: plant
+      - "#d6616b" # custom layer18: tv_monitor
+      - "#FFFF00" # base layer -1: goal
+    goal_mapping: ${goal_mapping}
+  
+  semantic_map_observer:
+    maps_config:
+      video_map:
+        type: world
+        threshold: 0.5
+        confidence_thres: 0.75
+        use_goal_cat: false
+        crop:
+          center: camera
+          width: 400
+          height: 400
+        smooth:
+          dilate_size: 3
+          dilate_iter: 2
+          erode_size: 3
+          erode_iter: 2
+        colorize:
+          draw_origin: true
+          draw_camera: true
+          draw_trajectory: true
+          draw_frontier: false
+
+  pretty_renderer:
+    # used to render pretty scenes for monitoring
+    canvas_config:
+      - - input: rgb
+          size: [640, 480]
+          label: RGB
+        - input: seg_color
+          size: [640, 480]
+          label: Semantics
+        - input: video_map
+          size: [480, 480]
+          label: "Topdown View"
+        - input: nav_map
+          size: [480, 480]
+          label: "Navigation map"
+    goal_mapping: ${goal_mapping}
+    backend: cv2 # cv2 (faster but ugly) or matplotlib
+    dpi: 200 # only available for matplotlib
+
+  monitor:
+    # monitoring, output video
+    root_dir: "${log_path}monitor/"
+    video: True
+    video_kwargs:
+      interval: 1
+      fps: 10
+
+agent:
+  # kemono agent config
+  seed: 1
+  timestep_limit: 500
+  clean_stair_map: true
+  stair_dilate_size: 7
+  stair_erode_size: 8
+
+  # agent controller
+  controller:
+    map_res: 0.05
+    map_size: 1440 # collision map, visited map, ...etc
+    plan_size: 240
+    plan_steps: 25
+    collision_thres: 0.2 # distance threshold (meter)
+    block_thres: 5  # thres to execute untrap helper
+    turn_angle: 30 # agent turning angle (deg)
+    turn_thres: 0.8 # turning thres (%)
+    occ_brush_size: 3 # nav map dilation size
+    
+    class_costs:
+      - 100000 # obstacles
+      - 1      # free
+      - 100000 # structures
+      - 1000   # stairs
+      - 100000 # railing
+      - 100000 # door
+      - 10000  # others
+    collision_cost: 1000
+
+    goal_brush_size: 6
+    use_iter_dilate: true
+    goal_iter_num: 3
+    goal_iter_brush_size: 2
+
+    replan_thres: 200
+
+  # keyboard controller
+  planners:
+    - type: points
+      map_size: 240
+      radius: 0.5657
+      angle: -135
+      n_points: 4
+      local_steps: 25
+
