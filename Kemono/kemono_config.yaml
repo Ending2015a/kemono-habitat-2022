@@ -15,22 +15,25 @@ goal_mapping:
 
 num_goal_classes: 6
 
-log_path: "./Kemono/logs/evaluate/val/version_0/"
+log_path: "./Kemono/logs/evaluate/val/version_5/"
 device: cuda
 eval_num_episodes: 100
+skip_to_episode: 0
 
 visualize:
-  monitoring: ${oc.env:IS_LOCAL,null}  # record mp4
+  draw_nav_map: ${oc.env:IS_LOCAL,null} # colorize navigation map
+  nav_map_key: nav_map
   render_scene: ${oc.env:IS_LOCAL,null}  # screen must be enabled
-  interact: false  # interact mode
+  monitoring: ${oc.env:IS_LOCAL,null}  # record mp4
+  interact: false  # interact mode (probe semantic results)
+  keyboard: false  # enable keyboard control
   waitKey: -1  # -1: no wait, 0: wait forever, 1~: ms
-  keyboard: false
+  scale: 0.7
   colors:
     obstacle_color: "#ffffff"
     objgoal_color: "#ff00ff"
     ltg_color: "#ffff00"
-    stg_color: null #"#00ff00"
-    #plan_ltg_color: "#00ff00"
+    stg_color: null
     collision_color: "#00ffff"
     visited_color: "#ff0000"
     frontier_color: "#228B22"
@@ -70,8 +73,8 @@ env:
     walkable_labels: [2, 16] # floor, stairs
     ignore_labels: [0, 17, 20, 28, 38] # void, ceiling, towel, lightning, clothes
     layers_labels:
-      - [1, 9, 24] # structure: wall, window, column
       - [16] # stairs
+      - [1, 9, 24] # structure: wall, window, column
       - [30] # railing
       - [4] # door
       - [27] # fireplace
@@ -106,8 +109,8 @@ env:
       - "#FFFFFF" # background
       - "#E2E2E2" # base layer 0: walkable
       - "#666666" # base layer 1: obstacles
-      - "#666666" # custom layer 0: structure
-      - "#9edae5" # custom layer 1: stairs
+      - "#9edae5" # custom layer 0: stairs
+      - "#666666" # custom layer 1: structure
       - "#bd9e39" # custom layer 2: railing
       - "#c5b0d5" # custom layer 3: door
       - "#ad494a" # custom layer 4: fireplace
@@ -181,45 +184,57 @@ agent:
   # kemono agent config
   seed: 1
   timestep_limit: 500
-  clean_stair_map: true
+  clean_stair_map: true # clean noises from stairs
   stair_dilate_size: 7
   stair_erode_size: 8
 
   # agent controller
   controller:
-    map_res: 0.05
-    map_size: 1440 # collision map, visited map, ...etc
-    plan_size: 240
-    plan_steps: 25
+    map_res: 0.05 # map resolution (meter/px)
+    map_size: 1440 # full map size, collision map, visited map
     collision_thres: 0.2 # distance threshold (meter)
-    block_thres: 5  # thres to execute untrap helper
+    collision_width: 1
+    collision_length: 1
+    collision_dist: 3
+    max_collision_width: 2
+    max_collision_length: 1
+    max_collision_dist: 4
+    block_thres: 10 # thres to execute untrap helper
+    replan_thres: 240 # replan goal if farther than this value
     turn_angle: 30 # agent turning angle (deg)
     turn_thres: 0.8 # turning thres (%)
-    occ_brush_size: 3 # nav map dilation size
-    
+    occ_brush_size: 3 # obstacle dilation size
+
+    walkable_channels: [0, 2] # free, stairs
     class_costs:
-      - 100000 # obstacles
-      - 1      # free
-      - 100000 # structures
-      - 1000   # stairs
-      - 100000 # railing
-      - 100000 # door
-      - 10000  # others
-    collision_cost: 1000
+      - 1      # walkable: 0 free
+      - 100    # walkable: 1 stairs
+      - 1000   # 2 collision
+      - 100000 # 3 obstacles
+      - 100000 # 4 structures
+      - 100000 # 5 railing
+      - 100000 # 6 door
+      - 10000  # >7 others
+    non_walkable: 2 # >2 collision are non-walkable
+    step_size: 0.20 # meter
+    stop_distance: 0.25 # meter
 
-    goal_brush_size: 6
-    use_iter_dilate: true
-    goal_iter_num: 3
-    goal_iter_brush_size: 2
-
-    replan_thres: 200
+    goal_brush_size: 6 # non-iterative goal dilation
+    use_iter_dilate: true # iterative goal dilation
+    goal_iter_num: 6 # iteration count
+    goal_iter_brush_size: 1 # dilation size
+    pad_surroundings: 1 # agent's surrounding pixels
+    pad_border: 1 # border pixels
 
   # keyboard controller
   planners:
+    # rule-based planner
+    - type: start_up
+      actions: [2,2,2,2,2,2,2,2,2,2] # turn left * 10
     - type: points
       map_size: 240
       radius: 0.5657
-      angle: -135
+      angle: 135
       n_points: 4
       local_steps: 25
 

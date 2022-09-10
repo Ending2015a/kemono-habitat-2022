@@ -2,6 +2,8 @@
 Kemono agent for habitat challenge 2022
 
 
+version: `v0.0.1`
+
 ## Evaluate on Local Machine
 
 First build the docker by the following command

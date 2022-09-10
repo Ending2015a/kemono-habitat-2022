@@ -74,7 +74,7 @@ class PointsPlanner(BasePlanner):
     angle = self.angle
     n_points = self.n_points
 
-    degs = np.linspace(angle, 360+angle, n_points, False)
+    degs = np.linspace(angle, angle-360, n_points, False)
     rads = degs / 180 * np.pi
     points = np.stack((np.cos(rads), np.sin(rads)), axis=-1)
     points = points * radius + 0.5

@@ -36,7 +36,7 @@ def main():
   habitat_config.freeze()
 
   # save config to log
-  os.makedirs(conf.log_path, exist_ok=True)
+  os.makedirs(conf.log_path, exist_ok=False)
   filename = os.path.join(conf.log_path, 'config.yaml')
   OmegaConf.save(config=conf, f=filename, resolve=True)
 
@@ -53,6 +53,9 @@ def main():
   for i in range(conf.eval_num_episodes):
     agent.reset()
     obs = env.reset()
+    if (conf.skip_to_episode > 0
+        and i+1 < self.skip_to_episode):
+      continue
     while True:
       act = agent.act(obs)
       obs, rew, done, info = env.step(act['action'])

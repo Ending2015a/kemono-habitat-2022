@@ -42,11 +42,11 @@ case $key in
     ;;
   -l|--local)
     shift
-    BUILD_TYPE="local"
+    BUILD_MODE="local"
     ;;
   -r|--remote)
     shift
-    BUILD_TYPE="remote"
+    BUILD_MODE="remote"
     ;;
   *) # unknown arg
     echo "Unknown args: ${key}" >&2

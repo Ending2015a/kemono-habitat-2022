@@ -46,13 +46,13 @@ case $key in
     ;;
   -l|--local)
     shift
-    BUILD_TYPE="local"
+    BUILD_MODE="local"
     EXTRA_ARGS="${EXTRA_ARGS} -v $(pwd)/Kemono:/Kemono"
     EXTRA_ARGS="${EXTRA_ARGS} -e IS_LOCAL=true"
     ;;
   -r|--remote)
     shift
-    BUILD_TYPE="remote"
+    BUILD_MODE="remote"
     ;;
   -b|--bash)
     shift

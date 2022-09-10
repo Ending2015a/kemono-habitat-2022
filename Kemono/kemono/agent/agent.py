@@ -116,6 +116,7 @@ def create_planners(conf, agent):
     planner_conf = copy.deepcopy(planner_conf)
     _type = planner_conf.pop('type')
     planner_class = registry.get.planner(_type)
+    assert planner_class, f"Planner not registered: {_type}"
     planner = planner_class(**planner_conf)
     planner.set_agent(agent)
     planners.append(planner)
@@ -211,8 +212,8 @@ class KemonoAgent(habitat.Agent):
     obs_ch = map_builder.obstacle_channel
     free_ch = map_builder.walkable_channel
     layer_ch = map_builder.layer_channel_start
-    stair_ch = layer_ch + 1
-    struct_ch = layer_ch
+    stair_ch = layer_ch
+    struct_ch = layer_ch + 1
     goal_cat_ch = map_builder.goal_cat_channel
     origin = world_map.get_origin()[0]
     nav_map = world_map.select(
@@ -255,6 +256,7 @@ class KemonoAgent(habitat.Agent):
     if self.conf.agent.clean_stair_map:
       stair_map = stair_map.astype(bool)
       occ_map = occ_map.astype(bool)
+      struct_map = struct_map.astype(bool)
       # dilate
       brush = skimage.morphology.disk(self.conf.agent.stair_dilate_size)
       stair_map = skimage.morphology.binary_dilation(stair_map, brush)
@@ -263,14 +265,11 @@ class KemonoAgent(habitat.Agent):
       stair_map = skimage.morphology.binary_erosion(stair_map, brush)
       # subtract stair map
       occ_map = np.logical_xor(np.logical_and(occ_map, stair_map), occ_map)
+      struct_map = np.logical_xor(np.logical_and(struct_map, stair_map), struct_map)
       occ_map = occ_map.astype(np.float32)
+      struct_map = struct_map.astype(np.float32)
       sem_map[obs_ch] = occ_map
-
-    # get frontier map
-    frontier = geometry.get_frontier_map(
-      sem_map[free_ch],
-      np.any(sem_map == 1, axis=0)
-    ).numpy()
+      sem_map[struct_ch] = struct_map
 
     self._goal_found = np.any(goal_map > 0)
     if not self.goal_found:
@@ -280,12 +279,11 @@ class KemonoAgent(habitat.Agent):
       plan.plan_act = None
 
     # match the planner coordinates (-w, -h)
-    sem_map = np.transpose(sem_map, (1, 2, 0)) # (h, w, c)
-    _sem_map = np.transpose(sem_map[::-1, ::-1, obs_ch:], (1, 0, 2)) # (-w, -h, c)
+    _sem_map = np.transpose(sem_map, (1, 2, 0)) # (h, w, c)
+    _sem_map = np.transpose(_sem_map[::-1, ::-1], (1, 0, 2)) # (-w, -h, c)
     _occ_map = occ_map[::-1, ::-1].T # (-w, -h)
     _goal_map = goal_map[::-1, ::-1].T
     _struct_map = struct_map[::-1, ::-1].T
-    _frontier = frontier[::-1, ::-1].T
 
     action = self.controller.act(
       nav_map = _sem_map,
@@ -296,10 +294,7 @@ class KemonoAgent(habitat.Agent):
       plan_act = plan.plan_act
     )
 
-    if not self.goal_found:
-      _goal_map = plan.plan_map[::-1, ::-1].T
-    else:
-      plan.plan_act = None
+    # === visualization ===
 
     if self.timestep == 1:
       obs = self._cached_env_ctx
@@ -307,56 +302,64 @@ class KemonoAgent(habitat.Agent):
       obs, rew, done, info = self._cached_env_ctx
     
     # visualize navigation map
-    if self.conf.visualize.monitoring:
+    if self.conf.visualize.draw_nav_map:
       hex2rgb = image_utils.hex2rgb
-      vis_conf = self.conf.visualize.colors
+      colors = self.conf.visualize.colors
       color_nav_map = np.zeros(occ_map.shape + (3,), dtype=np.uint8)
       # visualize obstacles
-      if vis_conf.obstacle_color is not None:
+      if colors.obstacle_color is not None:
         color_nav_map[occ_map > threshold] = \
-          np.array(hex2rgb(vis_conf.obstacle_color), dtype=np.uint8)
+          np.array(hex2rgb(colors.obstacle_color), dtype=np.uint8)
       
-      if vis_conf.stg_color is not None:
+      # visualize short-term goal
+      if colors.stg_color is not None:
         _goal = np.zeros_like(goal_map)
         _goal[self.controller.stg[0], self.controller.stg[1]] = 1
         _goal = _goal.T[::-1, ::-1]
         brush = skimage.morphology.disk(2)
         _goal = skimage.morphology.binary_dilation(_goal, brush)
         color_nav_map[_goal] = \
-            np.array(hex2rgb(vis_conf.stg_color), dtype=np.uint8)
+            np.array(hex2rgb(colors.stg_color), dtype=np.uint8)
 
-      if self.goal_found:
-        # visualize object goal
-        if vis_conf.objgoal_color is not None:
-          color_nav_map[goal_map > threshold] = \
-            np.array(hex2rgb(vis_conf.objgoal_color), dtype=np.uint8)
-      else:
-        # visualize long-term goal if object goal not found
-        if vis_conf.ltg_color is not None:
-          brush = skimage.morphology.disk(3)
-          _goal = skimage.morphology.binary_dilation(goal_map > threshold, brush)
-          color_nav_map[_goal] = \
-              np.array(hex2rgb(vis_conf.ltg_color), dtype=np.uint8)
+      # visualize object goal
+      if self.goal_found and colors.objgoal_color is not None:
+        color_nav_map[goal_map > threshold] = \
+          np.array(hex2rgb(colors.objgoal_color), dtype=np.uint8)
+      
+      # visualize long-term goal if object goal not found
+      if not self.goal_found and colors.ltg_color is not None:
+        brush = skimage.morphology.disk(3)
+        _goal = skimage.morphology.binary_dilation(goal_map > threshold, brush)
+        color_nav_map[_goal] = \
+            np.array(hex2rgb(colors.ltg_color), dtype=np.uint8)
+      
       # visualize frontiers
-      if vis_conf.frontier_color is not None:
+      if colors.frontier_color is not None:
+        # get frontier map
+        frontier = geometry.get_frontier_map(
+          sem_map[free_ch],
+          np.any(sem_map == 1, axis=0)
+        ).numpy()
         color_nav_map[frontier == 1] = \
-          np.array(hex2rgb(vis_conf.frontier_color), dtype=np.uint8)
-      # visualize collision/visited area
+          np.array(hex2rgb(colors.frontier_color), dtype=np.uint8)
+
       # Note that the plan_window is set after calling controller.act
       gx1, gx2, gy1, gy2 = self.controller.plan_window
-
-      if vis_conf.collision_color is not None:
+      # visualize collision area
+      if colors.collision_color is not None:
         colmap = self.controller.collision_map[gx1:gx2, gy1:gy2]
         color_nav_map[colmap.T[::-1, ::-1] == 1] = \
-          np.array(hex2rgb(vis_conf.collision_color), dtype=np.uint8)
+          np.array(hex2rgb(colors.collision_color), dtype=np.uint8)
 
-      if vis_conf.visited_color is not None:
+      # visualize visited area
+      if colors.visited_color is not None:
         vismap = self.controller.visited_map[gx1:gx2, gy1:gy2]
         color_nav_map[vismap.T[::-1, ::-1] == 1] = \
-          np.array(hex2rgb(vis_conf.visited_color), dtype=np.uint8)
+          np.array(hex2rgb(colors.visited_color), dtype=np.uint8)
+      # add colorized navigation map to obs Dict
+      obs[self.conf.visualize.nav_map_key] = color_nav_map
 
-      obs['nav_map'] = color_nav_map
-    
+    # this will call the Monitor wrapper to record mp4
     if self.timestep == 1:
       self.env.reset_record(obs)
     else:
@@ -364,11 +367,11 @@ class KemonoAgent(habitat.Agent):
 
     # render scene
     if self.conf.visualize.render_scene:
-      res = self.visualize()
-      if res is not None:
-        self.controller.action_deque[-1] = res
-        self.controller.last_action = res
-        action = {'action': res}
+      keyboard_action = self.render()
+      if keyboard_action is not None:
+        self.controller.action_deque[-1] = keyboard_action
+        self.controller.last_action = keyboard_action
+        action = {'action': keyboard_action}
 
     return action
 
@@ -393,27 +396,21 @@ class KemonoAgent(habitat.Agent):
     action = self.react(plan)
     return action
 
-  def visualize(self):
-    self.env.render(mode='human', scale=0.7)
+  def render(self):
+    self.env.render(mode='human', scale=self.conf.visualize.scale)
     if self.conf.visualize.interact:
       self.env.render(mode='interact')
     if self.conf.visualize.keyboard:
       while True:
         key = cv2.waitKey(0)
-        if key == ord('w'):
-          return 1
-        elif key == ord('a'):
-          return 2
-        elif key == ord('d'):
-          return 3
-        elif key == ord('f'):
-          return 0
-        elif key == ord('q'):
-          exit(0)
-        elif key == ord(' '):
-          return
+        if key == ord('w'): return 1
+        elif key == ord('a'): return 2
+        elif key == ord('d'): return 3
+        elif key == ord('f'): return 0
+        elif key == ord('q'): exit(0)
+        elif key == ord(' '): return None
         else:
           print(f'INVALID KEY: {key}')
           continue
     if self.conf.visualize.waitKey >= 0:
-      cv2.waitKey(self.conf.waitKey)
+      cv2.waitKey(self.conf.visualize.waitKey)

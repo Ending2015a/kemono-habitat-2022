@@ -62,7 +62,9 @@ class AgentController():
     self.collision_map = None
     self.visited_map = None
     self.prev_blocked = 0
-    self.col_width = 1 # collision width
+    self.col_width = self.conf.collision_width
+    self.col_length = self.conf.collision_length
+    self.col_dist = self.conf.collision_dist
     self.goal_found = False
     self.last_action = None
     self.action_deque = deque(maxlen=6)
@@ -105,7 +107,9 @@ class AgentController():
     self.collision_map = np.zeros((self.map_size, self.map_size))
     self.visited_map = np.zeros((self.map_size, self.map_size))
     self.prev_blocked = 0
-    self.col_width = 1 # collision width
+    self.col_width = self.conf.collision_width
+    self.col_length = self.conf.collision_length
+    self.col_dist = self.conf.collision_dist
     self.goal_found = False
     self.last_action = None
     self.action_deque = deque(maxlen=6)
@@ -196,9 +200,10 @@ class AgentController():
       diff_ang = curr_ang - goal_ang
       rel_ang = np.arctan2(np.sin(diff_ang), np.cos(diff_ang))
       turn_ang = np.deg2rad(self.conf.turn_angle)
-      if rel_ang > turn_ang * self.conf.turn_thres:
+      turn_thres = self.conf.turn_thres
+      if rel_ang > turn_ang * turn_thres:
         action = 3 # right
-      elif rel_ang < -turn_ang * self.conf.turn_thres:
+      elif rel_ang < -turn_ang * turn_thres:
         action = 2 # left
       else:
         action = 1 # forward
@@ -232,7 +237,6 @@ class AgentController():
     [gx1, gx2, gy1, gy2] = plan_window
 
     def add_boundary(image, pad=1, value=1):
-      len(image.shape)
       pad = [[pad, pad]] * 2 + [[0, 0]] * (len(image.shape)-2)
       return np.pad(image, pad, mode='constant', constant_values=value)
 
@@ -240,47 +244,48 @@ class AgentController():
       nav_map = np.expand_dims(nav_map, axis=-1) # (h, w, c)
     
     nav_map = nav_map.astype(bool)
+    if self.conf.occ_brush_size > 0:
+      for ch in range(nav_map.shape[-1]):
+        nav_map[..., ch] = skimage.morphology.binary_dilation(
+          nav_map[..., ch],
+          skimage.morphology.disk(self.conf.occ_brush_size)
+        )
+
+    collision_map = self.collision_map[gx1:gx2, gy1:gy2].copy()
+    visited_map = self.visited_map[gx1:gx2, gy1:gy2].copy()
+
+    travel_map = np.zeros(nav_map.shape[:2], dtype=np.int32)
+
+    idx = 0
+    # [free, stairs]
+    for ch in self.conf.walkable_channels:
+      travel_map[nav_map[..., ch]] = idx
+      idx += 1
+    # collisions
+    travel_map[collision_map == 1] = idx
+    idx += 1
     for ch in range(nav_map.shape[-1]):
-      nav_map[..., ch] = skimage.morphology.binary_dilation(
-        nav_map[..., ch],
-        skimage.morphology.disk(self.conf.occ_brush_size)
-      )
-    traversible = (nav_map[..., 0] != True).astype(np.int32)
-    # obstacle categories
-    # 0  -> obstacle
-    # 1  -> free
-    # >2 -> obstacle categories
-    for ch in range(1, nav_map.shape[-1]):
-      traversible[nav_map[..., ch]] = ch + 1
-    
-    collision_map = self.collision_map[gx1:gx2, gy1:gy2]
-    visited_map = self.visited_map[gx1:gx2, gy1:gy2]
-    traversible[collision_map == 1] = 0
-    traversible[visited_map == 1] = 1
+      if ch not in self.conf.walkable_channels:
+        travel_map[nav_map[..., ch]] = idx
+        idx += 1
+    # visited
+    travel_map[visited_map == 1] = 0
 
     # set agent's surroundings as free space
-    traversible[curr_loc[0]-1:curr_loc[0]+2,
-      curr_loc[1]-1:curr_loc[1]+2] = 1
+    s = self.conf.pad_surroundings
+    travel_map[curr_loc[0]-s:curr_loc[0]+s+1,
+      curr_loc[1]-s:curr_loc[1]+s+1] = 0
 
-    pad = 1
-    traversible = add_boundary(traversible, value=1, pad=pad)
+
+    pad = self.conf.pad_border if not goal_found else 0
+    travel_map = add_boundary(travel_map, value=0, pad=pad)
     goal_map = add_boundary(goal_map, value=0, pad=pad)
-    collision_map = add_boundary(collision_map, value=0, pad=pad)
-
-
-    # fast marching planner, used for short-term goal planning
-    planner = FMMPlanner(
-      traversible = traversible,
-      class_costs = self.conf.class_costs,
-      collision_cost = self.conf.collision_cost,
-      map_res = self.map_res
-    )
 
     if goal_found and self.conf.use_iter_dilate:
       goal = goal_map.copy()
       brush = skimage.morphology.disk(self.conf.goal_iter_brush_size)
       assert struct_map is not None
-      struct_map = add_boundary(struct_map, value=0)
+      struct_map = add_boundary(struct_map, value=0, pad=pad)
       for i in range(self.conf.goal_iter_num):
         goal = skimage.morphology.binary_dilation(goal, brush)
         goal[struct_map == 1] = False
@@ -288,10 +293,20 @@ class AgentController():
     else:
       brush = skimage.morphology.disk(self.conf.goal_brush_size)
       goal = skimage.morphology.binary_dilation(goal_map, brush)
-    
+
     goal = goal.astype(np.float32)
 
-    planner.set_goal_map(goal, collision_map, allow_collision=True)
+    # fast marching planner, used for short-term goal planning
+    planner = FMMPlanner(
+      travel_map = travel_map,
+      class_costs = self.conf.class_costs,
+      step_size = self.conf.step_size,
+      stop_distance = self.conf.stop_distance,
+      map_res = self.map_res,
+      non_walkable = self.conf.non_walkable
+    )
+
+    planner.set_goal_map(goal_map, allow_collision=True)
 
     # since we pad 1 to the plan map
     stg_x, stg_y, distance, stop = planner.plan_by_cost(curr_loc + pad)
@@ -304,13 +319,13 @@ class AgentController():
         brush = skimage.morphology.disk(2)
         goal = skimage.morphology.binary_dilation(goal, brush)
         goal = goal.astype(np.float32)
-        planner.set_goal_map(goal, collision_map, allow_collision=True)
+        planner.set_goal_map(goal, allow_collision=True)
         # at least one path will be found
         stg_x, stg_y, distance, stop = \
           planner.plan_by_cost(curr_loc + pad, stop_by_distance=True)
     
-    # remove pad 1
-    stg_x, stg_y = stg_x - 1, stg_y - 1
+    # remove padding
+    stg_x, stg_y = stg_x - pad, stg_y - pad
     return (stg_x, stg_y), stop
 
   def _update_visited_map(
@@ -334,38 +349,32 @@ class AgentController():
       x2, y2, _ = self.curr_pose
       x1, y1 = x1 + half, y1 + half
       x2, y2 = x2 + half, y2 + half
-      buf = 4
-      length = 2
 
       if abs(x1 - x2) + abs(y1 - y2) < self.conf.collision_thres:
 
-        self.col_width += 2
-        if self.col_width == 7:
-          length = 4
-          buf = 3
-        self.col_width = min(self.col_width, 3)
+        cx = (x1 + self.map_res * self.col_dist * np.cos(t1)) / self.map_res
+        cy = (y1 + self.map_res * self.col_dist * np.sin(t1)) / self.map_res
+
+        # draw collisions on collision map
+        rr, cc = skimage.draw.ellipse(
+          cy, cx, self.col_width, self.col_length, rotation=-t1
+        )
+        #rr, cc = skimage.draw.disk((cy, cx), self.col_width)
+        rr = np.clip(rr, 0, self.map_size-1)
+        cc = np.clip(cc, 0, self.map_size-1)
+        self.collision_map[rr, cc] = 1
 
         self.prev_blocked += 1
-        width = self.col_width
-        for i in range(length):
-          for j in range(width):
-            wx = x1 + self.map_res * \
-              ((i + buf) * np.cos(t1)
-                + (j - width // 2) * np.sin(t1))
-            wy = y1 + self.map_res * \
-              ((i + buf) * np.sin(t1)
-                - (j - width // 2) * np.cos(t1))
-            # convert to image coord
-            r, c = int(wy / self.map_res), int(wx / self.map_res)
-            r = np.clip(r, 0, self.map_size-1)
-            c = np.clip(c, 0, self.map_size-1)
-            self.collision_map[r, c] = 1
+        self.col_width = min(self.col_width + 0.5, self.conf.max_collision_width)
+        self.col_length = min(self.col_length + 0.5, self.conf.max_collision_length)
+        self.col_dist = min(self.col_dist + 0.5, self.conf.max_collision_dist)
       else:
         if self.prev_blocked >= self.conf.block_thres:
           self.untrap.reset()
         self.prev_blocked = 0
-        self.col_width = 1
-
+        # self.col_width = self.conf.collision_width
+        # self.col_length = self.conf.collision_length
+        # self.col_dist = self.conf.collision_dist
 
   def get_plan_map_bound(
     self,
