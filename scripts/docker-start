@@ -48,7 +48,6 @@ case $key in
     shift
     BUILD_MODE="local"
     EXTRA_ARGS="${EXTRA_ARGS} -v $(pwd)/Kemono:/Kemono"
-    EXTRA_ARGS="${EXTRA_ARGS} -e IS_LOCAL=true"
     ;;
   -r|--remote)
     shift

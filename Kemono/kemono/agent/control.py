@@ -191,8 +191,8 @@ class AgentController():
 
     self.stg = stg
 
-    if stop and goal_found:
-      return 0 # stop
+    if stop:
+      return 0
     else:
       (stg_x, stg_y) = stg
       goal_ang = np.arctan2(stg_x - curr_loc[0], stg_y - curr_loc[1])
@@ -300,18 +300,19 @@ class AgentController():
     planner = FMMPlanner(
       travel_map = travel_map,
       class_costs = self.conf.class_costs,
-      step_size = self.conf.step_size,
-      stop_distance = self.conf.stop_distance,
-      map_res = self.map_res,
+      step_size = self.conf.step_size / self.map_res,
       non_walkable = self.conf.non_walkable
     )
 
     planner.set_goal_map(goal_map, allow_collision=True)
 
     # since we pad 1 to the plan map
-    stg_x, stg_y, distance, stop = planner.plan_by_cost(curr_loc + pad)
+    # distance (px)
+    stg_x, stg_y, distance = \
+      planner.plan_by_cost(curr_loc + pad, cost_as_distance=True)
+    distance = distance * self.map_res
 
-    if distance > self.conf.replan_thres:
+    if distance > self.conf.far:
       if not goal_found:
         self.set_need_replan()
       else:
@@ -320,10 +321,21 @@ class AgentController():
         goal = skimage.morphology.binary_dilation(goal, brush)
         goal = goal.astype(np.float32)
         planner.set_goal_map(goal, allow_collision=True)
-        # at least one path will be found
-        stg_x, stg_y, distance, stop = \
-          planner.plan_by_cost(curr_loc + pad, stop_by_distance=True)
-    
+        # euclidean distance, at least one path will be found
+        stg_x, stg_y, distance = \
+          planner.plan_by_cost(curr_loc + pad, cost_as_distance=False)
+        distance = distance * self.map_res
+
+    stop = False
+
+    if distance < self.conf.near:
+      if not goal_found:
+        # long-term goal reached
+        self.set_need_replan()
+      else:
+        # object goal reached
+        stop = True
+
     # remove padding
     stg_x, stg_y = stg_x - pad, stg_y - pad
     return (stg_x, stg_y), stop

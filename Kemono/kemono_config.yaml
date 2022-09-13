@@ -1,6 +1,7 @@
 
 model_description: |
-  * v0: first version
+  * v0.0.1: first version
+    test-standard: spl: 0.3099, soft_spl: 0.3497, dist: 3.305, success: 0.58
 
 habitat_config: ${oc.env:CHALLENGE_CONFIG_FILE}
 
@@ -15,7 +16,7 @@ goal_mapping:
 
 num_goal_classes: 6
 
-log_path: "./Kemono/logs/evaluate/val/version_5/"
+log_path: "./Kemono/logs/evaluate/val/v0.0.1/"
 device: cuda
 eval_num_episodes: 100
 skip_to_episode: 0
@@ -200,10 +201,13 @@ agent:
     max_collision_length: 1
     max_collision_dist: 4
     block_thres: 10 # thres to execute untrap helper
-    replan_thres: 240 # replan goal if farther than this value
     turn_angle: 30 # agent turning angle (deg)
     turn_thres: 0.8 # turning thres (%)
     occ_brush_size: 3 # obstacle dilation size
+
+    step_size: 0.20 # meter
+    near: 0.25 # meter
+    far: 12 # meter (240*0.05)
 
     walkable_channels: [0, 2] # free, stairs
     class_costs:
@@ -216,8 +220,6 @@ agent:
       - 100000 # 6 door
       - 10000  # >7 others
     non_walkable: 2 # >2 collision are non-walkable
-    step_size: 0.20 # meter
-    stop_distance: 0.25 # meter
 
     goal_brush_size: 6 # non-iterative goal dilation
     use_iter_dilate: true # iterative goal dilation
@@ -238,3 +240,33 @@ agent:
       n_points: 4
       local_steps: 25
 
+
+rl:
+  type: sac
+  log_path: ./Kemono/logs/train/${.type}_v0/
+  habitat_config: ./Kemono/configs/hm3d_rl_train.yaml
+  seed: 5632
+
+  envs:
+    vec_envs:
+      n_envs: 2
+      use_subproc: true
+      use_gpus: [1, 2]
+    rewards:
+      step_reward: -0.1
+      dist_reward: 1.0
+      success_reward: 10.0
+      explore_reward: 0.0001
+      reduce: null # null, sum, mean
+    planner:
+      type: continuous
+      map_res: 0.05
+      map_size: 240
+      input_size: 240
+      plan_range: [0.1, 0.9]
+
+  agent:
+
+  checkpoint:
+
+  trainer:

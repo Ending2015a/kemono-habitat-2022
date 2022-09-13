@@ -45,7 +45,7 @@ class PointsPlanner(BasePlanner):
     if self.agent.need_replan:
       self.set_next_plan()
 
-    if self.curr_step == self.local_steps - 1:
+    if self.curr_step == self.local_steps:
       self.curr_step = 0
       self.need_update_local = True
 

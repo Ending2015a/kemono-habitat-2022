@@ -61,7 +61,9 @@ fi
 
 echo "Build docker image: ${DOCKER_NAME}"
 
+set -x
 DOCKER_BUILDKIT=1 docker build . \
   --build-arg INCUBATOR_VER=$(date +%Y%m%d-%H%M%S) \
   --file docker/${BUILD_MODE}_${BUILD_TYPE}.Dockerfile \
   -t $DOCKER_NAME
+set +x

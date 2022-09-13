@@ -15,7 +15,7 @@ from rlchemy import registry
 # --- my module ---
 from kemono.utils import geometry
 from kemono.utils import image as image_utils
-from kemono.agent.plan import Plan
+from kemono.agent.plan import Plan, merge_plans
 from kemono.agent.control import AgentController
 from kemono.envs import DummyEnv
 from kemono.envs.wrap import (
@@ -140,6 +140,7 @@ class KemonoAgent(habitat.Agent):
     self.timestep = 0
     self.total_episodes = 0
 
+    self._cached_obs = None
     self._cached_env_ctx = None
     self._need_replan = True
     self._goal_found = False
@@ -171,6 +172,7 @@ class KemonoAgent(habitat.Agent):
     self.total_episodes += 1
 
     self._need_replan = True
+    self._cached_obs = None
     self._cached_env_ctx = None
     self._goal_found = False
 
@@ -183,7 +185,6 @@ class KemonoAgent(habitat.Agent):
     self.timestep += 1
     if self.timestep > self.conf.agent.timestep_limit:
       return {'action': 0}
-    
     self.env.set_observation(observations)
     if self.timestep == 1:
       obs = self.env.reset()
@@ -193,6 +194,7 @@ class KemonoAgent(habitat.Agent):
       self._cached_env_ctx = (obs, rew, done, info)
 
     self.controller.update_state(observations)
+    self._cached_obs = observations
 
   def react(self, plan: Plan):
     self._need_replan = False
@@ -214,7 +216,7 @@ class KemonoAgent(habitat.Agent):
     layer_ch = map_builder.layer_channel_start
     stair_ch = layer_ch
     struct_ch = layer_ch + 1
-    goal_cat_ch = map_builder.goal_cat_channel
+    # goal_cat_ch = map_builder.goal_cat_channel
     origin = world_map.get_origin()[0]
     nav_map = world_map.select(
       (origin[0]+cx, origin[1]+cy),
@@ -375,24 +377,19 @@ class KemonoAgent(habitat.Agent):
 
     return action
 
-  def get_plan(self, observations):
-    final = Plan()
+  def get_plan(self):
+    plans = []
     for planner in self.planners:
-      plan = planner.act(observations)
-      # fill in plan map
-      if final.plan_map is None:
-        final.plan_map = plan.plan_map
-        final.center_pos = plan.center_pos
-      # fill in plan act
-      if final.plan_act is None:
-        final.plan_act = plan.plan_act
-
-    assert final.plan_map is not None
-    return final
+      plans.append(
+        planner.act(self._cached_obs)
+      )
+    plan = merge_plans(*plans)
+    assert plan.plan_map is not None
+    return plan
 
   def act(self, observations):
     self.observe(observations)
-    plan = self.get_plan(observations)
+    plan = self.get_plan()
     action = self.react(plan)
     return action
 

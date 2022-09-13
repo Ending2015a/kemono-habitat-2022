@@ -27,9 +27,7 @@ class FMMPlanner():
     self,
     travel_map: np.ndarray,
     class_costs: List[float] = [1., 100000., 1000.],
-    step_size: float = 0.25,
-    stop_distance: float = 0.25,
-    map_res: float = 0.05,
+    step_size: float = 5,
     non_walkable: int = 1,
     debug: bool = False
   ):
@@ -40,19 +38,15 @@ class FMMPlanner():
       class_costs (List[float], optional): traversal cost of each class.
         in default it's [free, obstacle, collision, ...].
         Defaults to [1., 100000., 1000.].
-      step_size (int, optional): step size (meter). Defaults to 0.25.
-      stop_dist (float, optional): stop distance (meter). Defaults to 0.25.
-      map_res (float, optional): map_res (meter/px). Defaults to 0.05.
+      step_size (int, optional): step size (px). Defaults to 5.
     """
     self.step_size = step_size
     self.class_costs = class_costs
-    self.map_res = map_res
-    self.stop_distance = stop_distance
     self.travel_map = travel_map
     self.non_walkable = non_walkable
     self.debug = debug
 
-    self.du = int(self.step_size / self.map_res)
+    self.du = int(self.step_size)
     self.fmm_dist = None
     self.fmm_cost = None
     self.mask = get_mask(self.du)
@@ -85,7 +79,7 @@ class FMMPlanner():
     dd = skfmm.travel_time(traversible, speed, dx=1)
     self.fmm_cost = dd
 
-  def plan_by_cost(self, state, stop_by_distance=False):
+  def plan_by_cost(self, state, cost_as_distance=True):
     mask = self.mask.copy()
 
     state = [int(x) for x in state]
@@ -118,11 +112,10 @@ class FMMPlanner():
 
 
     # use distance or cost to judge if the goal reached
-    if stop_by_distance:
-      distance = subset_dist[self.du, self.du]
-    else:
+    if cost_as_distance:
       distance = subset_cost[self.du, self.du]
-    stop = distance < self.stop_distance / self.map_res
+    else:
+      distance = subset_dist[self.du, self.du]
 
     subset_cost -= subset_cost[self.du, self.du]
     (stg_x, stg_y) = np.unravel_index(np.argmin(subset_cost), subset_cost.shape)
@@ -138,4 +131,4 @@ class FMMPlanner():
     stg_x = (stg_x + state[0] - self.du) # subtract padded dist
     stg_y = (stg_y + state[1] - self.du)
 
-    return stg_x, stg_y, distance, stop
+    return stg_x, stg_y, distance

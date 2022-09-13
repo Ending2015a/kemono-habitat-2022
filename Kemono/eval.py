@@ -19,7 +19,7 @@ def main():
     OmegaConf.from_dotlist(a.dot_list) # command line
   )
   # load habitat configs
-  habitat_config_path = conf.habitat_config
+  habitat_config_path = os.environ['CHALLENGE_CONFIG_FILE']
   habitat_config = habitat.get_config(habitat_config_path)
   # create agent
   agent = KemonoAgent(
@@ -27,8 +27,10 @@ def main():
     habitat_config = habitat_config
   )
   # submit challenge
-  eval_remote = (a.evaluation == 'local')
-  challenge = habitat.Challenge(eval_remote=eval_remote)
+  if a.evaluation == "local":
+    challenge = habitat.Challenge(eval_remote=False)
+  else:
+    challenge = habitat.Challenge(eval_remote=True)
   challenge.submit(agent)
 
 if __name__ == "__main__":
