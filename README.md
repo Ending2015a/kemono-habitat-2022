@@ -5,6 +5,12 @@ Kemono agent for habitat challenge 2022
 
 Kemono agent is a *pure-rule-based* object-goal-navigation agent. It can achieve SPL **0.3099** and SUCCESS **0.58** on the test-standard track of habitat challenge 2022.
 
+<img src="https://github.com/Ending2015a/kemono-habitat-2022/blob/master/assets/system.png" width="50%">
+
+
+
+https://user-images.githubusercontent.com/18180004/189946415-393b9957-43a7-457f-a2f3-bf5c6f8c4ce3.mp4
+
 
 
 version: `v0.0.1`
