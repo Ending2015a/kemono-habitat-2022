@@ -238,7 +238,7 @@ agent:
       radius: 0.5657
       angle: 135
       n_points: 4
-      local_steps: 25
+      local_steps: 24
 
 
 rl:
