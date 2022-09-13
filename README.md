@@ -1,8 +1,17 @@
 # kemono-habitat-2022
+
 Kemono agent for habitat challenge 2022
 
 
+Kemono agent is a *pure-rule-based* object-goal-navigation agent. It can achieve SPL **0.3099** and SUCCESS **0.58** on the test-standard track of habitat challenge 2022.
+
+
+
 version: `v0.0.1`
+
+It uses the following packages:
+* [Ending2015a/dungeon_maps](https://github.com/Ending2015a/dungeon_maps): A highly accurate semantic top-down mapper
+* [Ending2015a/rlchemy](https://github.com/Ending2015a/rlchemy): Reinforcement Learning package
 
 ## Evaluate on Local Machine
 
@@ -28,7 +37,7 @@ bash scripts/docker-start --bash
 bash ./scripts/evaluation.sh
 ```
 
-## Submit to Remote Machine
+## Submit to EvalAI
 ```shell
 bash scripts/docker-build --remote --submit
 # submission command refer to the challenge page
