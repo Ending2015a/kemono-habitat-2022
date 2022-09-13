@@ -21,27 +21,27 @@ It uses the following packages:
 
 ## Evaluate on Local Machine
 
-First build the docker by the following command
+1. [Download the pretrained RedNet checkpoint here](https://drive.google.com/file/d/1n7_c352ftcTHR-USYhnfQSbvjX-5i-8Y/view?usp=sharing), place it at `Kemono/weights/*.ckpt`
+2. Build the docker by the following command
 ```shell
 bash scripts/docker-build
 ```
-
-Then, you have to set the following variables before you run the evaluation process:
+3. Setup the following variables:
 ```shell
 export HABITAT_DATA_DIR="/path/to/your/habitat-challenge-data"
 export HABITAT_LOG_DIR="/path/to/your/log/dir"
 ```
-
+4. Start a container and run the evaluation process:
 * Run in a non-interactive container
-```shell
-bash scripts/docker-start
-```
+  ```shell
+  bash scripts/docker-start
+  ```
 * Run in an interactive container
-```shell
-bash scripts/docker-start --bash
-. activate habitat
-bash ./scripts/evaluation.sh
-```
+  ```shell
+  bash scripts/docker-start --bash
+  . activate habitat
+  bash ./scripts/evaluation.sh
+  ```
 
 ## Submit to EvalAI
 ```shell
