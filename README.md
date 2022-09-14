@@ -9,7 +9,9 @@ Kemono agent is a *pure-rule-based* object-goal-navigation agent. It can achieve
 
 
 
-https://user-images.githubusercontent.com/18180004/189946415-393b9957-43a7-457f-a2f3-bf5c6f8c4ce3.mp4
+
+https://user-images.githubusercontent.com/18180004/190056280-6096fdce-2d84-4e7b-a33c-710fb4c3d07c.mp4
+
 
 
 
