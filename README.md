@@ -15,11 +15,18 @@ https://user-images.githubusercontent.com/18180004/190056280-6096fdce-2d84-4e7b-
 
 
 
-version: `v0.0.1`
+version: `v0.0.2`
 
 It uses the following packages:
 * [Ending2015a/dungeon_maps](https://github.com/Ending2015a/dungeon_maps): A highly accurate semantic top-down mapper
 * [Ending2015a/rlchemy](https://github.com/Ending2015a/rlchemy): Reinforcement Learning package
+
+## Performance
+
+| Version | SPL | SUCCESS |
+|-|-|-|
+| v0.0.2  | 0.3136 | 0.571 |
+| v0.0.1  | 0.3099 | 0.58  |
 
 ## Evaluate on Local Machine
 
@@ -34,16 +41,16 @@ export HABITAT_DATA_DIR="/path/to/your/habitat-challenge-data"
 export HABITAT_LOG_DIR="/path/to/your/log/dir"
 ```
 4. Start a container and run the evaluation process:
-* Run in a non-interactive container
-  ```shell
-  bash scripts/docker-start
-  ```
-* Run in an interactive container
-  ```shell
-  bash scripts/docker-start --bash
-  . activate habitat
-  bash ./scripts/evaluation.sh
-  ```
+    * Non-interactive mode
+      ```shell
+      bash scripts/docker-start
+      ```
+    * Interactive mode (bash)
+      ```shell
+      bash scripts/docker-start --bash
+      . activate habitat
+      bash ./scripts/evaluation.sh
+      ```
 
 ## Submit to EvalAI
 ```shell
